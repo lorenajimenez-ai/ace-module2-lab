@@ -58,35 +58,33 @@ export function getUserProfile () {
         if (!code) {
           throw new Error('Username is null')
         }
+        const mathRegex = /^[\d\s+\-*/%().]+$/
         const singleQuoteRegex = /^'(?:[^'\\]|\\.)*'$/
         const doubleQuoteRegex = /^"(?:[^"\\]|\\.)*"$/
-        const backtickRegex = /^`(?:[^`\\$]|\\.|\$(?!{))*`$/
-        const numericRegex = /^-?\d+(?:\.\d+)?$/
         const booleanRegex = /^(?:true|false|null|undefined)$/
 
-        const isSafe = singleQuoteRegex.test(code) ||
+        const isSafe = !code.includes('//') && !code.includes('/*') && (
+          mathRegex.test(code) ||
+          singleQuoteRegex.test(code) ||
           doubleQuoteRegex.test(code) ||
-          backtickRegex.test(code) ||
-          numericRegex.test(code) ||
           booleanRegex.test(code)
+        )
 
         if (!isSafe) {
           throw new Error('Unsafe code execution blocked')
         }
-        username = eval(code) // eslint-disable-line no-eval
+        username = String(eval(code)) // eslint-disable-line no-eval
       } catch (err) {
-        username = '\\' + username
+        username = user.username
       }
     } else {
-      username = '\\' + username
+      username = user.username
     }
 
     const themeKey = config.get<string>('application.theme') as keyof typeof themes
     const theme = themes[themeKey] || themes['bluegrey-lightgreen']
 
-    if (username) {
-      template = template.replace(/_username_/g, username)
-    }
+    template = template.replace(/_username_/g, '!{userProfileUsername}')
     template = template.replace(/_emailHash_/g, security.hash(user?.email))
     template = template.replace(/_title_/g, entities.encode(config.get<string>('application.name')))
     template = template.replace(/_favicon_/g, favicon())
@@ -110,6 +108,7 @@ export function getUserProfile () {
         'Content-Security-Policy': CSP
       })
 
+      ;(user as any).userProfileUsername = username ?? ''
       res.send(fn(user))
     } catch (err) {
       next(new Error('Blocked illegal activity by ' + req.socket.remoteAddress))
